@@ -15,13 +15,24 @@ from .serializers import (
 from .permissions import IsAdminOrStaff
 
 
+class PublicGETMixin:
+    """
+    Mixin that bypasses authentication for public GET, HEAD, and OPTIONS requests.
+    Prevents 401 Unauthorized errors on public endpoints when frontend passes an expired or bad token.
+    """
+    def get_authenticators(self):
+        if self.request.method in ['GET', 'HEAD', 'OPTIONS']:
+            return []
+        return super().get_authenticators()
+
+
 class FoodPagination(PageNumberPagination):
     page_size = 16
     page_size_query_param = 'page_size'
     max_page_size = 100
 
 
-class ComboListCreateAPIView(generics.ListCreateAPIView):
+class ComboListCreateAPIView(PublicGETMixin, generics.ListCreateAPIView):
     """
     API endpoint to list combos (GET) and create a combo (POST).
     GET is public. POST requires admin or staff permissions.
@@ -39,7 +50,6 @@ class ComboListCreateAPIView(generics.ListCreateAPIView):
                 queryset = queryset.filter(veg=False)
         return queryset
 
-
     def get_permissions(self):
         if self.request.method == 'POST':
             return [IsAdminOrStaff()]
@@ -51,7 +61,7 @@ class ComboListCreateAPIView(generics.ListCreateAPIView):
         return ComboListSerializer
 
 
-class ComboDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+class ComboDetailAPIView(PublicGETMixin, generics.RetrieveUpdateDestroyAPIView):
     """
     API endpoint to retrieve, update, or soft-delete a Combo item.
     GET is public. PUT/PATCH/DELETE require admin or staff permissions.
@@ -72,7 +82,7 @@ class ComboDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
         instance.delete()
 
 
-class BannerListCreateAPIView(generics.ListCreateAPIView):
+class BannerListCreateAPIView(PublicGETMixin, generics.ListCreateAPIView):
     """
     API endpoint to list banners (GET) and create a banner (POST).
     GET is public and returns banners where show=True. POST requires admin or staff permissions.
@@ -88,7 +98,7 @@ class BannerListCreateAPIView(generics.ListCreateAPIView):
         return [AllowAny()]
 
 
-class CategoryListCreateAPIView(generics.ListCreateAPIView):
+class CategoryListCreateAPIView(PublicGETMixin, generics.ListCreateAPIView):
     """
     API endpoint to list categories (GET) and create a category (POST).
     GET is public. POST requires admin or staff permissions.
@@ -104,7 +114,8 @@ class CategoryListCreateAPIView(generics.ListCreateAPIView):
             return [IsAdminOrStaff()]
         return [AllowAny()]
 
-class CategoryDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+
+class CategoryDetailAPIView(PublicGETMixin, generics.RetrieveUpdateDestroyAPIView):
     """
     API endpoint to retrieve, update, or soft-delete a Category.
     GET is public. PUT/PATCH/DELETE require admin or staff permissions.
@@ -120,7 +131,8 @@ class CategoryDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         instance.delete()
 
-class CategoryFoodListAPIView(generics.ListAPIView):
+
+class CategoryFoodListAPIView(PublicGETMixin, generics.ListAPIView):
     """
     API endpoint to list all food items belonging to a specific category ID.
     GET /api/categories/<category_id>/foods/
@@ -134,8 +146,7 @@ class CategoryFoodListAPIView(generics.ListAPIView):
         return Food.objects.filter(category=category, is_deleted=False).select_related('category').order_by('id')
 
 
-
-class OfferFoodListAPIView(generics.ListAPIView):
+class OfferFoodListAPIView(PublicGETMixin, generics.ListAPIView):
     """
     API endpoint to list food items currently on offer (discount_price > 0).
     Excludes soft-deleted foods (is_deleted=True) and soft-deleted categories.
@@ -158,7 +169,7 @@ class OfferFoodListAPIView(generics.ListAPIView):
         ).order_by('-discount_diff', 'id').select_related('category')
 
 
-class FoodListCreateAPIView(generics.ListCreateAPIView):
+class FoodListCreateAPIView(PublicGETMixin, generics.ListCreateAPIView):
     """
     API endpoint to list food items (GET) and create food items (POST).
     GET is public. POST requires admin or staff role permissions.
@@ -181,8 +192,6 @@ class FoodListCreateAPIView(generics.ListCreateAPIView):
 
         return queryset
 
-
-
     def get_permissions(self):
         if self.request.method == 'POST':
             return [IsAdminOrStaff()]
@@ -193,7 +202,8 @@ class FoodListCreateAPIView(generics.ListCreateAPIView):
             return FoodCreateSerializer
         return FoodListSerializer
 
-class FoodDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+
+class FoodDetailAPIView(PublicGETMixin, generics.RetrieveUpdateDestroyAPIView):
     """
     API endpoint to retrieve, update, or soft-delete a Food item.
     GET is public. PUT/PATCH/DELETE require admin or staff permissions.
@@ -212,3 +222,4 @@ class FoodDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
 
     def perform_destroy(self, instance):
         instance.delete()
+
