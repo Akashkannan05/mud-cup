@@ -8,7 +8,11 @@ from .views import (
     CategoryListCreateAPIView,
     CategoryDetailAPIView,
     CategoryFoodListAPIView,
-    OfferFoodListAPIView
+    OfferFoodListAPIView,
+    OrderCreateAPIView,
+    ActiveOrderListAPIView,
+    MyOrderListAPIView,
+    OrderMarkPaidAPIView
 )
 
 urlpatterns = [
@@ -21,6 +25,10 @@ urlpatterns = [
     path('foods/<int:pk>/', FoodDetailAPIView.as_view(), name='food-detail'),
     path('combos/', ComboListCreateAPIView.as_view(), name='combo-list'),
     path('combos/<int:pk>/', ComboDetailAPIView.as_view(), name='combo-detail'),
+    path('orders/', OrderCreateAPIView.as_view(), name='order-create'),
+    path('orders/active/', ActiveOrderListAPIView.as_view(), name='order-active'),
+    path('orders/my-orders/', MyOrderListAPIView.as_view(), name='order-my'),
+    path('orders/<str:order_id>/paid/', OrderMarkPaidAPIView.as_view(), name='order-mark-paid'),
 ]
 
 

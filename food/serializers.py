@@ -1,6 +1,6 @@
 import json
 from rest_framework import serializers
-from .models import Food, Category, Banner, Combo
+from .models import Food, Category, Banner, Combo, Order
 
 
 
@@ -83,9 +83,14 @@ class FoodListSerializer(serializers.ModelSerializer):
 
     def get_discount_amount(self, obj):
         if obj.price is not None and obj.discount_price is not None:
-            diff = obj.price - obj.discount_price
-            if diff > 0 and obj.discount_price > 0:
-                return str(diff)
+            try:
+                price_val = float(obj.price)
+                discount_val = float(obj.discount_price)
+                diff = price_val - discount_val
+                if diff > 0 and discount_val > 0:
+                    return f"{diff:.2f}"
+            except (ValueError, TypeError):
+                pass
         return "0.00"
 
 
@@ -188,19 +193,22 @@ class ComboCreateSerializer(serializers.ModelSerializer):
 
     def to_internal_value(self, data):
         if hasattr(data, 'getlist'):
-            data = data.copy()
             food_ids = data.getlist('food_ids')
             if len(food_ids) == 1 and isinstance(food_ids[0], str):
                 val = food_ids[0].strip()
                 if val.startswith('[') and val.endswith(']'):
                     try:
                         parsed = json.loads(val.replace("'", '"'))
+                        data._mutable = True
                         data.setlist('food_ids', [str(i) for i in parsed])
+                        data._mutable = False
                     except Exception:
                         pass
                 elif ',' in val:
                     parsed = [i.strip() for i in val.split(',') if i.strip()]
+                    data._mutable = True
                     data.setlist('food_ids', parsed)
+                    data._mutable = False
         elif isinstance(data, dict) and 'food_ids' in data:
             val = data['food_ids']
             if isinstance(val, str):
@@ -258,3 +266,24 @@ class ComboCreateSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         return ComboListSerializer(instance, context=self.context).data
 
+class OrderSerializer(serializers.ModelSerializer):
+    orderId = serializers.CharField(source='order_id', read_only=True)
+    customerName = serializers.CharField(source='customer_name')
+    tableNumber = serializers.CharField(source='table_number')
+    totalAmount = serializers.DecimalField(source='total_amount', max_digits=10, decimal_places=2)
+    finalAmount = serializers.DecimalField(source='final_amount', max_digits=10, decimal_places=2)
+    placedAt = serializers.DateTimeField(source='placed_at', read_only=True)
+    isPaid = serializers.BooleanField(source='is_paid', read_only=True)
+
+    class Meta:
+        model = Order
+        fields = ('orderId', 'customerName', 'tableNumber', 'items', 'totalAmount', 'finalAmount', 'placedAt', 'isPaid')
+
+    def create(self, validated_data):
+        import uuid
+        from django.utils.text import slugify
+        customer_name = validated_data.get('customer_name', '')
+        base_slug = slugify(customer_name) if customer_name else 'order'
+        unique_id = f"{base_slug}_{uuid.uuid4().hex[:6]}"
+        validated_data['order_id'] = unique_id
+        return super().create(validated_data)

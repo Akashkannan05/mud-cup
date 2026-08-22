@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.conf import settings
 
 
 class SoftDeleteQuerySet(models.QuerySet):
@@ -151,5 +152,19 @@ class Combo(models.Model):
             return self.image.url
         return None
 
+class Order(models.Model):
+    order_id = models.CharField(max_length=100, unique=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
+    customer_name = models.CharField(max_length=100, default='Unknown')
+    table_number = models.CharField(max_length=20, default='Takeaway')
+    items = models.JSONField(default=list)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    final_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    placed_at = models.DateTimeField(auto_now_add=True)
+    is_paid = models.BooleanField(default=False)
 
+    class Meta:
+        db_table = 'order'
 
+    def __str__(self):
+        return f"Order {self.order_id}"

@@ -2,15 +2,19 @@ from django.db.models import Count, F, ExpressionWrapper, DecimalField, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import AllowAny
-from .models import Food, Category, Banner, Combo
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Food, Category, Banner, Combo, Order
 from .serializers import (
     FoodListSerializer,
     FoodCreateSerializer,
     CategorySerializer,
     BannerSerializer,
     ComboListSerializer,
-    ComboCreateSerializer
+    ComboCreateSerializer,
+    OrderSerializer
 )
 from .permissions import IsAdminOrStaff
 
@@ -223,3 +227,44 @@ class FoodDetailAPIView(PublicGETMixin, generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         instance.delete()
 
+class OrderCreateAPIView(generics.CreateAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [AllowAny] # Matching legacy behavior if no auth was strictly enforced for create
+
+    def perform_create(self, serializer):
+        user = self.request.user if self.request.user.is_authenticated else None
+        serializer.save(user=user)
+        
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {'message': 'Order created successfully', 'order_id': serializer.data['orderId']},
+            status=status.HTTP_201_CREATED,
+            headers=headers
+        )
+
+class ActiveOrderListAPIView(generics.ListAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [AllowAny] # Matching old behavior, alternatively IsAdminOrStaff
+    
+    def get_queryset(self):
+        return Order.objects.filter(is_paid=False).order_by('-placed_at')
+
+class MyOrderListAPIView(generics.ListAPIView):
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user, is_paid=False).order_by('-placed_at')
+
+class OrderMarkPaidAPIView(APIView):
+    permission_classes = [AllowAny] # Or IsAdminOrStaff
+
+    def post(self, request, order_id, *args, **kwargs):
+        order = get_object_or_404(Order, order_id=order_id)
+        order.is_paid = True
+        order.save()
+        return Response({'message': 'Order marked as paid'}, status=status.HTTP_200_OK)
