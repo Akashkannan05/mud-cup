@@ -53,13 +53,15 @@ class LoginAPIView(APIView):
             key='access_token',
             value=str(refresh.access_token),
             httponly=True,
-            samesite='Lax'
+            samesite='None',
+            secure=True
         )
         response.set_cookie(
             key='refresh_token',
             value=str(refresh),
             httponly=True,
-            samesite='Lax'
+            samesite='None',
+            secure=True
         )
 
         return response
@@ -81,7 +83,8 @@ class CookieTokenRefreshView(TokenRefreshView):
                         key='access_token',
                         value=access_token,
                         httponly=True,
-                        samesite='Lax'
+                        samesite='None',
+                        secure=True
                     )
             return response
         except TokenError as e:
