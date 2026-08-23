@@ -257,7 +257,7 @@ class MyOrderListAPIView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user, is_paid=False).order_by('-placed_at')
+        return Order.objects.filter(user=self.request.user).order_by('-placed_at')
 
 class OrderMarkPaidAPIView(APIView):
     permission_classes = [AllowAny] # Or IsAdminOrStaff
