@@ -162,9 +162,24 @@ class Order(models.Model):
     final_amount = models.DecimalField(max_digits=10, decimal_places=2)
     placed_at = models.DateTimeField(auto_now_add=True)
     is_paid = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
 
     class Meta:
         db_table = 'order'
 
     def __str__(self):
         return f"Order {self.order_id}"
+
+    def delete(self, using=None, keep_parents=False):
+        self.is_deleted = True
+        self.deleted_at = timezone.now()
+        self.save()
+
+    def restore(self):
+        self.is_deleted = False
+        self.deleted_at = None
+        self.save()

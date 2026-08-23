@@ -250,7 +250,7 @@ class ActiveOrderListAPIView(generics.ListAPIView):
     permission_classes = [AllowAny] # Matching old behavior, alternatively IsAdminOrStaff
     
     def get_queryset(self):
-        return Order.objects.filter(is_paid=False).order_by('-placed_at')
+        return Order.objects.filter(is_deleted=False).order_by('-placed_at')
 
 class MyOrderListAPIView(generics.ListAPIView):
     serializer_class = OrderSerializer
@@ -264,6 +264,5 @@ class OrderMarkPaidAPIView(APIView):
 
     def post(self, request, order_id, *args, **kwargs):
         order = get_object_or_404(Order, order_id=order_id)
-        order.is_paid = True
-        order.save()
-        return Response({'message': 'Order marked as paid'}, status=status.HTTP_200_OK)
+        order.delete()
+        return Response({'message': 'Order deleted successfully'}, status=status.HTTP_200_OK)
