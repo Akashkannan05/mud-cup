@@ -37,6 +37,8 @@ class LoginAPIView(APIView):
 
         response = Response({
             'message': 'Login successful',
+            'access_token': str(refresh.access_token),
+            'refresh_token': str(refresh),
             'user': {
                 'id': user.id,
                 'username': user.username,

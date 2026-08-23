@@ -10,20 +10,26 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
+import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from .env file
+load_dotenv(BASE_DIR / '.env', override=True)
+load_dotenv(BASE_DIR.parent / '.env', override=True)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-bcifn*4e+jbuw&@!+hdgjf#hj)gn2m8iecn$3)k_+!wf98ut%o'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-bcifn*4e+jbuw&@!+hdgjf#hj)gn2m8iecn$3)k_+!wf98ut%o')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 't')
 
 ALLOWED_HOSTS = []
 
@@ -45,6 +51,7 @@ INSTALLED_APPS = [
     # Local apps
     'food',
     'user',
+    'payment',
 ]
 
 REST_FRAMEWORK = {
@@ -168,5 +175,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Disallow automatic trailing slash redirects to prevent HTTP method conversion (e.g. DELETE -> GET)
 APPEND_SLASH = False
+
+# Razorpay Configuration
+RAZORPAY_KEY_ID = os.getenv('RAZORPAY_KEY_ID', '')
+RAZORPAY_KEY_SECRET = os.getenv('RAZORPAY_KEY_SECRET', '')
 
 

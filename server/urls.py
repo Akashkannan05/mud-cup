@@ -25,6 +25,7 @@ urlpatterns = [
     path('health/', HealthCheckView.as_view(), name='health_check'),
     path('api/food/', include('food.urls')),
     path('api/user/', include('user.urls')),
+    path('api/payment/', include('payment.urls')),
 ]
 
 

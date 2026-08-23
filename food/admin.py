@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Category, Food, Banner, Combo
+from .models import Category, Food, Banner, Combo, Order
 
 
 @admin.register(Banner)
@@ -39,3 +39,4 @@ class ComboAdmin(admin.ModelAdmin):
         return Combo.all_objects.all()
 
 
+admin.site.register(Order)

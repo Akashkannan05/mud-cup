@@ -12,3 +12,6 @@ Pillow
 # Server & Environment Utilities
 gunicorn
 python-dotenv
+
+# Payment Gateway
+razorpay

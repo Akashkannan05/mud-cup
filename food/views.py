@@ -229,11 +229,10 @@ class FoodDetailAPIView(PublicGETMixin, generics.RetrieveUpdateDestroyAPIView):
 
 class OrderCreateAPIView(generics.CreateAPIView):
     serializer_class = OrderSerializer
-    permission_classes = [AllowAny] # Matching legacy behavior if no auth was strictly enforced for create
+    permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
-        user = self.request.user if self.request.user.is_authenticated else None
-        serializer.save(user=user)
+        serializer.save(user=self.request.user)
         
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
