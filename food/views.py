@@ -468,9 +468,20 @@ class RecentItemSalesAPIView(APIView):
         sales_list = list(item_stats.values())
         sales_list.sort(key=lambda x: (x['qty_sold'], x['total_amount']), reverse=True)
 
+        limit_param = request.query_params.get('limit')
+        if limit_param:
+            try:
+                limit = int(limit_param)
+                results_list = sales_list[:limit]
+            except ValueError:
+                results_list = sales_list
+        else:
+            results_list = sales_list
+
         return Response({
-            'count': len(sales_list),
-            'results': sales_list,
+            'total_items': len(sales_list),
+            'count': len(results_list),
+            'results': results_list,
             'date_filter': {
                 'start_date': start_dt.isoformat() if start_dt else None,
                 'end_date': end_dt.isoformat() if end_dt else None
