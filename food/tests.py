@@ -6,7 +6,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APIClient
 from user.models import UserDetails
-from .models import Category, Food, Banner, Combo
+from .models import Category, Food, Banner, Combo, Order
 
 
 
@@ -392,6 +392,96 @@ class ComboAPIViewTests(TestCase):
         self.assertFalse(Combo.objects.filter(pk=combo.pk).exists())
         deleted_combo = Combo.all_objects.get(pk=combo.pk)
         self.assertTrue(deleted_combo.is_deleted)
+
+
+class DashboardAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin_user = UserDetails.objects.create_user(username='admin_dash', password='pwd', role='admin')
+        self.customer_user = UserDetails.objects.create_user(username='cust_dash', password='pwd', role='customer')
+
+        # Order 1: Paid, Food items + Combo item
+        Order.objects.create(
+            order_id='ORD1',
+            user=self.customer_user,
+            customer_name='John Doe',
+            table_number='Table 1',
+            items=[
+                {'name': 'Classic Mud Cup', 'price': 150.0, 'quantity': 2, 'tag': None},
+                {'name': 'Couples Combo', 'price': 450.0, 'quantity': 1, 'tag': 'COMBO'}
+            ],
+            total_amount=750.00,
+            final_amount=750.00,
+            is_paid=True
+        )
+
+        # Order 2: Active / Unpaid, Food items
+        Order.objects.create(
+            order_id='ORD2',
+            user=self.customer_user,
+            customer_name='Jane Smith',
+            table_number='Table 2',
+            items=[
+                {'name': 'Cold Coffee', 'price': 90.0, 'quantity': 3, 'tag': None},
+                {'name': 'Spicy Paneer Wrap', 'price': 120.0, 'quantity': 1, 'tag': 'OFFER'}
+            ],
+            total_amount=390.00,
+            final_amount=390.00,
+            is_paid=False
+        )
+
+    def test_dashboard_metrics_unauthenticated_forbidden(self):
+        url = reverse('dashboard-metrics')
+        response = self.client.get(url)
+        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
+
+    def test_dashboard_metrics_customer_forbidden(self):
+        self.client.force_authenticate(user=self.customer_user)
+        url = reverse('dashboard-metrics')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_dashboard_metrics_admin_success(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('dashboard-metrics')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(data['active_orders'], 1)
+        self.assertEqual(data['payment_till_now'], 750.00)
+        self.assertEqual(data['items_sales_count'], 6)  # 2 Mud Cup + 3 Cold Coffee + 1 Wrap = 6
+        self.assertEqual(data['combo_sales_count'], 1)  # 1 Couples Combo
+        self.assertEqual(data['total_orders'], 2)
+        self.assertEqual(data['total_customers'], 1)
+
+    def test_recent_item_sales_admin_success(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('recent-item-sales')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertEqual(data['count'], 4)
+        results = data['results']
+        item_names = [item['item_name'] for item in results]
+        self.assertIn('Classic Mud Cup', item_names)
+        self.assertIn('Couples Combo', item_names)
+        self.assertIn('Cold Coffee', item_names)
+        self.assertIn('Spicy Paneer Wrap', item_names)
+
+        mud_cup = next(item for item in results if item['item_name'] == 'Classic Mud Cup')
+        self.assertEqual(mud_cup['qty_sold'], 2)
+        self.assertEqual(mud_cup['total_amount'], 300.0)
+
+    def test_dashboard_metrics_with_preset_today(self):
+        self.client.force_authenticate(user=self.admin_user)
+        url = reverse('dashboard-metrics') + '?preset=today'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertIsNotNone(data['date_filter']['start_date'])
+        self.assertIsNotNone(data['date_filter']['end_date'])
+
+
 
 
 

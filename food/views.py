@@ -266,3 +266,214 @@ class OrderMarkPaidAPIView(APIView):
         order = get_object_or_404(Order, order_id=order_id)
         order.delete()
         return Response({'message': 'Order deleted successfully'}, status=status.HTTP_200_OK)
+
+
+from datetime import datetime, time, timedelta
+from django.utils import timezone
+from django.db.models import Sum
+
+
+def parse_date_range(request):
+    """
+    Parses optional start_date, end_date, or preset query parameters.
+    Returns (start_datetime, end_datetime).
+    If date filters are not provided or empty, returns (None, None) so all records are returned.
+    """
+    start_date_str = request.query_params.get('start_date') or request.query_params.get('startDate')
+    end_date_str = request.query_params.get('end_date') or request.query_params.get('endDate')
+    preset = request.query_params.get('preset')
+
+    now = timezone.now()
+    today = now.date()
+
+    if preset:
+        preset = preset.lower().strip()
+        if preset == 'today':
+            start = timezone.make_aware(datetime.combine(today, time.min))
+            end = timezone.make_aware(datetime.combine(today, time.max))
+            return start, end
+        elif preset == 'yesterday':
+            yesterday = today - timedelta(days=1)
+            start = timezone.make_aware(datetime.combine(yesterday, time.min))
+            end = timezone.make_aware(datetime.combine(yesterday, time.max))
+            return start, end
+        elif preset == 'this_week':
+            start_of_week = today - timedelta(days=today.weekday())
+            start = timezone.make_aware(datetime.combine(start_of_week, time.min))
+            end = timezone.make_aware(datetime.combine(today, time.max))
+            return start, end
+        elif preset == 'this_month':
+            start_of_month = today.replace(day=1)
+            start = timezone.make_aware(datetime.combine(start_of_month, time.min))
+            end = timezone.make_aware(datetime.combine(today, time.max))
+            return start, end
+
+    start_dt, end_dt = None, None
+
+    if start_date_str:
+        try:
+            d = datetime.strptime(start_date_str.split('T')[0], '%Y-%m-%d').date()
+            start_dt = timezone.make_aware(datetime.combine(d, time.min))
+        except (ValueError, AttributeError):
+            pass
+
+    if end_date_str:
+        try:
+            d = datetime.strptime(end_date_str.split('T')[0], '%Y-%m-%d').date()
+            end_dt = timezone.make_aware(datetime.combine(d, time.max))
+        except (ValueError, AttributeError):
+            pass
+
+    return start_dt, end_dt
+
+
+class DashboardMetricsAPIView(APIView):
+    """
+    API endpoint to retrieve aggregated dashboard metrics:
+    - Active Orders
+    - Payment Till Now (Total Revenue)
+    - Items Sales Count
+    - Combo Sales Count
+    - Total Orders
+    - Total Customers
+    
+    Supports optional date filtering via ?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+    or ?preset=today|yesterday|this_week|this_month.
+    If no date filter is provided, returns all-time data.
+    Only accessible by Admin or Staff users.
+    """
+    permission_classes = [IsAdminOrStaff]
+
+    def get(self, request, *args, **kwargs):
+        start_dt, end_dt = parse_date_range(request)
+
+        orders = Order.objects.filter(is_deleted=False)
+
+        if start_dt:
+            orders = orders.filter(placed_at__gte=start_dt)
+        if end_dt:
+            orders = orders.filter(placed_at__lte=end_dt)
+
+        # 1. Active Orders (is_paid=False and is_deleted=False)
+        active_orders = orders.filter(is_paid=False).count()
+
+        # 2. Payment Till Now (Total sum of final_amount for paid orders, fallback to all non-deleted orders if none marked paid yet)
+        paid_orders = orders.filter(is_paid=True)
+        payment_till_now_val = paid_orders.aggregate(total=Sum('final_amount'))['total']
+        if payment_till_now_val is None:
+            payment_till_now_val = orders.aggregate(total=Sum('final_amount'))['total'] or 0.00
+        payment_till_now = float(payment_till_now_val)
+
+        # 3 & 4. Items Sales Count & Combo Sales Count
+        items_sales_count = 0
+        combo_sales_count = 0
+
+        for order in orders:
+            order_items = order.items if isinstance(order.items, list) else []
+            for item in order_items:
+                if not isinstance(item, dict):
+                    continue
+                qty = int(item.get('quantity') or item.get('qty') or item.get('count') or 1)
+                tag = str(item.get('tag') or item.get('type') or '').upper()
+                is_combo = (tag == 'COMBO') or bool(item.get('is_combo')) or bool(item.get('isCombo'))
+
+                if is_combo:
+                    combo_sales_count += qty
+                else:
+                    items_sales_count += qty
+
+        # 5. Total Orders
+        total_orders = orders.count()
+
+        # 6. Total Customers (unique users or customer names)
+        unique_user_ids = set(orders.exclude(user__isnull=True).values_list('user_id', flat=True))
+        unique_guest_names = set(orders.filter(user__isnull=True).values_list('customer_name', flat=True))
+        total_customers = len(unique_user_ids.union(unique_guest_names))
+
+        return Response({
+            'active_orders': active_orders,
+            'payment_till_now': payment_till_now,
+            'items_sales_count': items_sales_count,
+            'combo_sales_count': combo_sales_count,
+            'total_orders': total_orders,
+            'total_customers': total_customers,
+            'date_filter': {
+                'start_date': start_dt.isoformat() if start_dt else None,
+                'end_date': end_dt.isoformat() if end_dt else None
+            }
+        }, status=status.HTTP_200_OK)
+
+
+class RecentItemSalesAPIView(APIView):
+    """
+    API endpoint to retrieve item-wise sales summary:
+    - Item Name
+    - Price (1 pc)
+    - Qty Sold
+    - Total Amount
+    - Tag (e.g. COMBO, OFFER, or null)
+    
+    Supports optional date filtering via ?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+    or ?preset=today|yesterday|this_week|this_month.
+    If no date filter is provided, returns all-time data.
+    Only accessible by Admin or Staff users.
+    """
+    permission_classes = [IsAdminOrStaff]
+
+    def get(self, request, *args, **kwargs):
+        start_dt, end_dt = parse_date_range(request)
+
+        orders = Order.objects.filter(is_deleted=False)
+
+        if start_dt:
+            orders = orders.filter(placed_at__gte=start_dt)
+        if end_dt:
+            orders = orders.filter(placed_at__lte=end_dt)
+
+        item_stats = {}
+
+        for order in orders:
+            order_items = order.items if isinstance(order.items, list) else []
+            for item in order_items:
+                if not isinstance(item, dict):
+                    continue
+
+                name = item.get('name') or item.get('item_name') or item.get('title')
+                if not name:
+                    continue
+
+                qty = int(item.get('quantity') or item.get('qty') or item.get('count') or 1)
+                price = float(item.get('price') or item.get('unit_price') or item.get('unitPrice') or 0.0)
+
+                raw_tag = item.get('tag') or item.get('type')
+                tag = str(raw_tag).upper() if raw_tag else None
+                if tag and tag not in ['COMBO', 'OFFER']:
+                    tag = str(raw_tag)
+
+                key = name.strip()
+                if key not in item_stats:
+                    item_stats[key] = {
+                        'item_name': key,
+                        'price': price,
+                        'qty_sold': 0,
+                        'total_amount': 0.0,
+                        'tag': tag
+                    }
+
+                item_stats[key]['qty_sold'] += qty
+                item_stats[key]['total_amount'] += (qty * price)
+                if tag and not item_stats[key]['tag']:
+                    item_stats[key]['tag'] = tag
+
+        sales_list = list(item_stats.values())
+        sales_list.sort(key=lambda x: (x['qty_sold'], x['total_amount']), reverse=True)
+
+        return Response({
+            'count': len(sales_list),
+            'results': sales_list,
+            'date_filter': {
+                'start_date': start_dt.isoformat() if start_dt else None,
+                'end_date': end_dt.isoformat() if end_dt else None
+            }
+        }, status=status.HTTP_200_OK)
+
