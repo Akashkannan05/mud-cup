@@ -5,6 +5,8 @@ djangorestframework
 # Authentication & CORS
 djangorestframework-simplejwt
 django-cors-headers
+google-auth
+requests
 
 # Image Handling (for models.ImageField)
 Pillow

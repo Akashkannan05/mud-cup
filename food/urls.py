@@ -34,5 +34,3 @@ urlpatterns = [
     path('dashboard/metrics/', DashboardMetricsAPIView.as_view(), name='dashboard-metrics'),
     path('dashboard/recent-item-sales/', RecentItemSalesAPIView.as_view(), name='recent-item-sales'),
 ]
-
-

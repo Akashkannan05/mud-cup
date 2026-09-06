@@ -19,10 +19,13 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from server.views import HealthCheckView
+from user.views import GoogleLoginAPIView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('health/', HealthCheckView.as_view(), name='health_check'),
+    path('api/auth/callback/google', GoogleLoginAPIView.as_view(), name='google-auth-callback'),
+    path('api/auth/callback/google/', GoogleLoginAPIView.as_view(), name='google-auth-callback-slash'),
     path('api/food/', include('food.urls')),
     path('api/user/', include('user.urls')),
     path('api/payment/', include('payment.urls')),
