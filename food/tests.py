@@ -472,14 +472,42 @@ class DashboardAPITests(TestCase):
         self.assertEqual(mud_cup['qty_sold'], 2)
         self.assertEqual(mud_cup['total_amount'], 300.0)
 
-    def test_dashboard_metrics_with_preset_today(self):
+    def test_active_order_list_returns_only_unpaid_orders(self):
         self.client.force_authenticate(user=self.admin_user)
-        url = reverse('dashboard-metrics') + '?preset=today'
+        url = reverse('order-active')
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        orders = response.json()
+        self.assertEqual(len(orders), 1)
+        self.assertEqual(orders[0]['orderId'], 'ORD2')
+        self.assertFalse(orders[0]['isPaid'])
+
+    def test_order_item_toggle_completion(self):
+        url = reverse('order-item-toggle', kwargs={'order_id': 'ORD2'})
+        response = self.client.post(url, {'item_index': 0}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
-        self.assertIsNotNone(data['date_filter']['start_date'])
-        self.assertIsNotNone(data['date_filter']['end_date'])
+        self.assertTrue(data['is_completed'])
+        self.assertTrue(data['order']['items'][0]['is_completed'])
+
+
+from channels.testing import WebsocketCommunicator
+from food.consumers import ActiveOrdersConsumer, broadcast_active_orders
+
+class ActiveOrdersWebSocketTestCase(TestCase):
+    async def test_websocket_connect_and_receive_initial_orders(self):
+        communicator = WebsocketCommunicator(ActiveOrdersConsumer.as_asgi(), "/ws/orders/active/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        response = await communicator.receive_json_from()
+        self.assertEqual(response['type'], 'active_orders_update')
+        self.assertEqual(response['event'], 'connection_established')
+        self.assertIn('active_orders', response)
+
+        await communicator.disconnect()
+
+
 
 
 

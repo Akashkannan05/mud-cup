@@ -13,6 +13,7 @@ from .views import (
     ActiveOrderListAPIView,
     MyOrderListAPIView,
     OrderMarkPaidAPIView,
+    OrderItemToggleAPIView,
     DashboardMetricsAPIView,
     RecentItemSalesAPIView,
 )
@@ -31,6 +32,7 @@ urlpatterns = [
     path('orders/active/', ActiveOrderListAPIView.as_view(), name='order-active'),
     path('orders/my-orders/', MyOrderListAPIView.as_view(), name='order-my'),
     path('orders/<str:order_id>/paid/', OrderMarkPaidAPIView.as_view(), name='order-mark-paid'),
+    path('orders/<str:order_id>/items/toggle/', OrderItemToggleAPIView.as_view(), name='order-item-toggle'),
     path('dashboard/metrics/', DashboardMetricsAPIView.as_view(), name='dashboard-metrics'),
     path('dashboard/recent-item-sales/', RecentItemSalesAPIView.as_view(), name='recent-item-sales'),
 ]

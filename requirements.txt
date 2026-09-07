@@ -1,4 +1,6 @@
 # Core Framework
+daphne
+channels
 Django
 djangorestframework
 

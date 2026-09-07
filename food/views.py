@@ -17,6 +17,7 @@ from .serializers import (
     OrderSerializer
 )
 from .permissions import IsAdminOrStaff
+from .consumers import broadcast_active_orders
 
 
 class PublicGETMixin:
@@ -229,16 +230,18 @@ class FoodDetailAPIView(PublicGETMixin, generics.RetrieveUpdateDestroyAPIView):
 
 class OrderCreateAPIView(generics.CreateAPIView):
     serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        user = self.request.user if self.request.user and self.request.user.is_authenticated else None
+        return serializer.save(user=user)
         
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        order_instance = self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
+        broadcast_active_orders(event_type="order_created", order_data=serializer.data)
         return Response(
             {'message': 'Order created successfully', 'order_id': serializer.data['orderId']},
             status=status.HTTP_201_CREATED,
@@ -250,7 +253,7 @@ class ActiveOrderListAPIView(generics.ListAPIView):
     permission_classes = [AllowAny] # Matching old behavior, alternatively IsAdminOrStaff
     
     def get_queryset(self):
-        return Order.objects.filter(is_deleted=False).order_by('-placed_at')
+        return Order.objects.filter(is_deleted=False, is_paid=False).order_by('-placed_at')
 
 class MyOrderListAPIView(generics.ListAPIView):
     serializer_class = OrderSerializer
@@ -264,8 +267,60 @@ class OrderMarkPaidAPIView(APIView):
 
     def post(self, request, order_id, *args, **kwargs):
         order = get_object_or_404(Order, order_id=order_id)
-        order.delete()
-        return Response({'message': 'Order deleted successfully'}, status=status.HTTP_200_OK)
+        order.is_paid = True
+        order.save()
+        broadcast_active_orders(event_type="order_paid", order_data=OrderSerializer(order).data)
+        return Response({'message': 'Order marked as paid successfully'}, status=status.HTTP_200_OK)
+
+class OrderItemToggleAPIView(APIView):
+    """
+    API endpoint to toggle or set item-level completion status (checkbox) for an order item.
+    Payload: {"item_index": 0, "is_completed": true} or {"item_index": 0} to toggle.
+    Triggers WebSocket broadcast (event_type='order_item_updated').
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, order_id, *args, **kwargs):
+        order = get_object_or_404(Order, order_id=order_id)
+        items = order.items if isinstance(order.items, list) else []
+        
+        item_index = request.data.get('item_index')
+        if item_index is None:
+            item_index = request.data.get('itemIndex')
+
+        if item_index is None or not isinstance(item_index, int) or item_index < 0 or item_index >= len(items):
+            return Response(
+                {'error': f'Invalid item_index: {item_index}. Order contains {len(items)} items.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        target_item = items[item_index]
+        if not isinstance(target_item, dict):
+            return Response({'error': 'Item is not a valid object.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        is_completed = request.data.get('is_completed')
+        if is_completed is None:
+            is_completed = request.data.get('isCompleted')
+        
+        if is_completed is None:
+            current_status = target_item.get('is_completed') or target_item.get('isCompleted') or False
+            is_completed = not current_status
+        
+        target_item['is_completed'] = bool(is_completed)
+        target_item['isCompleted'] = bool(is_completed)
+        
+        order.items = items
+        order.save()
+        
+        # ⚡ Real-time WebSocket Broadcast
+        broadcast_active_orders(event_type="order_item_updated", order_data=OrderSerializer(order).data)
+        
+        return Response({
+            'message': 'Item status updated successfully',
+            'item_index': item_index,
+            'is_completed': target_item['is_completed'],
+            'order': OrderSerializer(order).data
+        }, status=status.HTTP_200_OK)
 
 
 from datetime import datetime, time, timedelta
